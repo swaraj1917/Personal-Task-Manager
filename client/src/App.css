@@ -188,7 +188,6 @@ body {
   padding: 14px 14px 14px 32px;
   border: 2px solid transparent;
   transition: transform 0.15s;
-  touch-action: none;
 }
 
 .task-card:hover { transform: translateY(-1px); }
@@ -204,7 +203,6 @@ body {
   font-size: 1.2rem;
   letter-spacing: -2px;
   user-select: none;
-  touch-action: none;
 }
 
 .task-card[draggable="true"] { cursor: grab; }
