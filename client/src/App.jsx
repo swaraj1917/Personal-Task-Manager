@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
+
+const API = "https://personal-task-manager-api-bydr.onrender.com";
 
 function App() {
   const [tasks, setTasks] = useState([]);
@@ -16,38 +18,39 @@ function App() {
   const [editDesc, setEditDesc] = useState("");
   const [editDate, setEditDate] = useState("");
 
+  // ── Long-press tracking refs (no re-render needed) ──
+  const longPressTimer = useRef(null);   // setTimeout handle
+  const isDragging = useRef(false);      // true only after long press fires
+  const touchIndex = useRef(null);       // which card the finger is on
+
   const fetchTasks = () => {
-    fetch("https://personal-task-manager-api-bydr.onrender.com/tasks")
+    fetch(`${API}/tasks`)
       .then((res) => res.json())
       .then((data) => setTasks(data))
       .catch((err) => console.error(err));
   };
 
-  useEffect(() => {
-    fetchTasks();
-  }, []);
+  useEffect(() => { fetchTasks(); }, []);
 
   const addTask = async (e) => {
     e.preventDefault();
-    await fetch("https://personal-task-manager-api-bydr.onrender.com/tasks", {
+    await fetch(`${API}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, description, dueDate }),
     });
-    setTitle("");
-    setDescription("");
-    setDueDate("");
+    setTitle(""); setDescription(""); setDueDate("");
     fetchTasks();
   };
 
   const toggleComplete = async (id) => {
-    await fetch(`https://personal-task-manager-api-bydr.onrender.com/tasks/${id}`, { method: "PUT" });
+    await fetch(`${API}/tasks/${id}`, { method: "PUT" });
     fetchTasks();
   };
 
   const deleteTask = async (id) => {
     if (!window.confirm("Delete this task?")) return;
-    await fetch(`https://personal-task-manager-api-bydr.onrender.com/tasks/${id}`, { method: "DELETE" });
+    await fetch(`${API}/tasks/${id}`, { method: "DELETE" });
     fetchTasks();
   };
 
@@ -59,14 +62,10 @@ function App() {
   };
 
   const saveEdit = async (id) => {
-    await fetch(`https://personal-task-manager-api-bydr.onrender.com/tasks/edit/${id}`, {
+    await fetch(`${API}/tasks/edit/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: editTitle,
-        description: editDesc,
-        dueDate: editDate,
-      }),
+      body: JSON.stringify({ title: editTitle, description: editDesc, dueDate: editDate }),
     });
     setEditId(null);
     fetchTasks();
@@ -77,16 +76,18 @@ function App() {
 
   const filteredTasks = tasks.filter((task) => {
     const statusMatch =
-      filter === "active" ? !task.completed : filter === "completed" ? task.completed : true;
+      filter === "active" ? !task.completed :
+      filter === "completed" ? task.completed : true;
     const searchMatch =
-      searchTerm.trim() === "" || task.title.toLowerCase().includes(searchTerm.toLowerCase());
+      searchTerm.trim() === "" ||
+      task.title.toLowerCase().includes(searchTerm.toLowerCase());
     return statusMatch && searchMatch;
   });
 
   const activeCount = tasks.filter((t) => !t.completed).length;
   const completedCount = tasks.filter((t) => t.completed).length;
 
-  // ── Drag & Drop Handlers (Desktop + Mobile) ──
+  // ── Desktop Drag & Drop ──
   const handleDragStart = (e, index) => {
     setDraggedItem(index);
     e.dataTransfer.effectAllowed = "move";
@@ -101,90 +102,91 @@ function App() {
   const handleDragOver = (e, index) => {
     e.preventDefault();
     if (draggedItem === null || draggedItem === index) return;
-    
     const newTasks = [...filteredTasks];
-    const draggedTask = newTasks[draggedItem];
-    newTasks.splice(draggedItem, 1);
-    newTasks.splice(index, 0, draggedTask);
-    
-    const orderedTaskIds = newTasks.map(task => task.id);
-    const remainingTasks = tasks.filter(task => !orderedTaskIds.includes(task.id));
-    const reorderedFullTasks = [...newTasks, ...remainingTasks];
-    
-    setTasks(reorderedFullTasks);
+    const [moved] = newTasks.splice(draggedItem, 1);
+    newTasks.splice(index, 0, moved);
+    const orderedIds = newTasks.map((t) => t.id);
+    const rest = tasks.filter((t) => !orderedIds.includes(t.id));
+    setTasks([...newTasks, ...rest]);
     setDraggedItem(index);
   };
 
   const handleDrop = async (e) => {
     e.preventDefault();
-    e.currentTarget.style.opacity = "";
-    
-    const orderedTaskIds = filteredTasks.map(task => task.id);
+    const orderedTaskIds = filteredTasks.map((t) => t.id);
     try {
-      await fetch("https://personal-task-manager-api-bydr.onrender.com/tasks/reorder", {
+      await fetch(`${API}/tasks/reorder`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderedTaskIds }),
       });
-    } catch (error) {
-      console.error("Failed to save order:", error);
-      fetchTasks();
-    }
+    } catch { fetchTasks(); }
     setDraggedItem(null);
   };
 
-  // Mobile touch handlers
-  let touchTimeout;
+  // ── Mobile Touch: Long Press to Drag ──
+  // User must hold finger for 500ms before drag activates.
+  // A quick tap or scroll does NOT trigger drag.
+
   const handleTouchStart = (e, index) => {
-    e.preventDefault();
-    touchTimeout = setTimeout(() => {
+    touchIndex.current = index;
+    isDragging.current = false;
+
+    // Start a 500ms timer — only if it completes, drag mode turns on
+    longPressTimer.current = setTimeout(() => {
+      isDragging.current = true;
       setDraggedItem(index);
-      e.currentTarget.style.opacity = "0.4";
-    }, 100);
+      // Light vibration feedback on devices that support it
+      if (navigator.vibrate) navigator.vibrate(50);
+    }, 500);
   };
 
-  const handleTouchMove = (e, index) => {
+  const handleTouchMove = (e) => {
+    // If long press hasn't fired yet, cancel it — user is scrolling
+    if (!isDragging.current) {
+      clearTimeout(longPressTimer.current);
+      return; // let the browser scroll normally
+    }
+
+    // Long press already fired — we are in drag mode, prevent scroll
     e.preventDefault();
-    if (draggedItem === null) return;
-    
+
     const touch = e.touches[0];
-    const elements = document.querySelectorAll('.task-card');
-    
+    const elements = document.querySelectorAll(".task-card");
+
     elements.forEach((el, i) => {
       const rect = el.getBoundingClientRect();
-      if (touch.clientY > rect.top && touch.clientY < rect.bottom && draggedItem !== i) {
+      if (
+        touch.clientY > rect.top &&
+        touch.clientY < rect.bottom &&
+        draggedItem !== i
+      ) {
         const newTasks = [...filteredTasks];
-        const draggedTask = newTasks[draggedItem];
-        newTasks.splice(draggedItem, 1);
-        newTasks.splice(i, 0, draggedTask);
-        
-        const orderedTaskIds = newTasks.map(task => task.id);
-        const remainingTasks = tasks.filter(task => !orderedTaskIds.includes(task.id));
-        const reorderedFullTasks = [...newTasks, ...remainingTasks];
-        
-        setTasks(reorderedFullTasks);
+        const [moved] = newTasks.splice(draggedItem, 1);
+        newTasks.splice(i, 0, moved);
+        const orderedIds = newTasks.map((t) => t.id);
+        const rest = tasks.filter((t) => !orderedIds.includes(t.id));
+        setTasks([...newTasks, ...rest]);
         setDraggedItem(i);
       }
     });
   };
 
   const handleTouchEnd = async (e) => {
-    clearTimeout(touchTimeout);
-    e.currentTarget.style.opacity = "";
-    
-    if (draggedItem !== null) {
-      const orderedTaskIds = filteredTasks.map(task => task.id);
+    clearTimeout(longPressTimer.current);
+
+    if (isDragging.current) {
+      const orderedTaskIds = filteredTasks.map((t) => t.id);
       try {
-        await fetch("https://personal-task-manager-api-bydr.onrender.com/tasks/reorder", {
+        await fetch(`${API}/tasks/reorder`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderedTaskIds }),
         });
-      } catch (error) {
-        console.error("Failed to save order:", error);
-        fetchTasks();
-      }
+      } catch { fetchTasks(); }
     }
+
+    isDragging.current = false;
     setDraggedItem(null);
   };
 
@@ -193,7 +195,8 @@ function App() {
       <h1 className="title">📋 PERSONAL TASK MANAGER</h1>
 
       <div className="layout">
-        {/* LEFT PANEL */}
+
+        {/* ── LEFT PANEL ── */}
         <div className="left-panel">
           <form className="form" onSubmit={addTask}>
             <h2>New Task</h2>
@@ -230,9 +233,8 @@ function App() {
           </div>
         </div>
 
-        {/* RIGHT PANEL */}
+        {/* ── RIGHT PANEL ── */}
         <div className="right-panel">
-          {/* Search Bar */}
           <input
             type="text"
             className="search-input"
@@ -241,36 +243,33 @@ function App() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
 
-          {/* Search Result Count */}
           {searchTerm && (
             <div className="search-result-count">
               Found {filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""} matching "{searchTerm}"
             </div>
           )}
 
-          {/* Filter Buttons */}
           <div className="filter-buttons">
             {["all", "active", "completed"].map((f) => (
-              <button key={f} className={filter === f ? "active" : ""} onClick={() => setFilter(f)}>
+              <button
+                key={f}
+                className={filter === f ? "active" : ""}
+                onClick={() => setFilter(f)}
+              >
                 {f.charAt(0).toUpperCase() + f.slice(1)}
               </button>
             ))}
           </div>
 
-          {/* My Tasks */}
           <div className="section-title-wrapper">
             <p className="section-title">My Tasks</p>
           </div>
 
-          {/* Task List with Drag & Drop */}
           <div className="task-list">
             {filteredTasks.length === 0 ? (
               <div className="empty">
                 {searchTerm ? (
-                  <>
-                    <div className="empty-icon">🔍</div>
-                    <div>No tasks match your search</div>
-                  </>
+                  <><div className="empty-icon">🔍</div><div>No tasks match your search</div></>
                 ) : (
                   "No tasks here 🎉"
                 )}
@@ -286,7 +285,7 @@ function App() {
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDrop={handleDrop}
                   onTouchStart={(e) => handleTouchStart(e, index)}
-                  onTouchMove={(e) => handleTouchMove(e, index)}
+                  onTouchMove={handleTouchMove}
                   onTouchEnd={handleTouchEnd}
                 >
                   {editId !== task.id ? (
@@ -324,6 +323,7 @@ function App() {
             )}
           </div>
         </div>
+
       </div>
     </div>
   );
