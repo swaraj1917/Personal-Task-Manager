@@ -29,7 +29,7 @@ function App() {
 
   const addTask = async (e) => {
     e.preventDefault();
-    await fetch("https://https://personal-task-manager-api-bydr.onrender.com/tasks", {
+    await fetch("https://personal-task-manager-api-bydr.onrender.com/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, description, dueDate }),
