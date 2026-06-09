@@ -17,7 +17,7 @@ function App() {
   const [editDate, setEditDate] = useState("");
 
   const fetchTasks = () => {
-    fetch("https://task-manager-api.onrender.com/tasks")
+    fetch("https://https://personal-task-manager-api-bydr.onrender.com/tasks")
       .then((res) => res.json())
       .then((data) => setTasks(data))
       .catch((err) => console.error(err));
@@ -29,7 +29,7 @@ function App() {
 
   const addTask = async (e) => {
     e.preventDefault();
-    await fetch("https://task-manager-api.onrender.com/tasks", {
+    await fetch("https://https://personal-task-manager-api-bydr.onrender.com/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, description, dueDate }),
@@ -41,13 +41,13 @@ function App() {
   };
 
   const toggleComplete = async (id) => {
-    await fetch(`https://task-manager-api.onrender.com/tasks/${id}`, { method: "PUT" });
+    await fetch(`https://https://personal-task-manager-api-bydr.onrender.com/tasks/${id}`, { method: "PUT" });
     fetchTasks();
   };
 
   const deleteTask = async (id) => {
     if (!window.confirm("Delete this task?")) return;
-    await fetch(`https://task-manager-api.onrender.com/tasks/${id}`, { method: "DELETE" });
+    await fetch(`https://https://personal-task-manager-api-bydr.onrender.com/tasks/${id}`, { method: "DELETE" });
     fetchTasks();
   };
 
@@ -59,7 +59,7 @@ function App() {
   };
 
   const saveEdit = async (id) => {
-    await fetch(`https://task-manager-api.onrender.com/tasks/edit/${id}`, {
+    await fetch(`https://https://personal-task-manager-api-bydr.onrender.com/tasks/edit/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -121,7 +121,7 @@ function App() {
     
     const orderedTaskIds = filteredTasks.map(task => task.id);
     try {
-      await fetch("https://task-manager-api.onrender.com/tasks/reorder", {
+      await fetch("https://https://personal-task-manager-api-bydr.onrender.com/tasks/reorder", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orderedTaskIds }),
@@ -175,7 +175,7 @@ function App() {
     if (draggedItem !== null) {
       const orderedTaskIds = filteredTasks.map(task => task.id);
       try {
-        await fetch("https://task-manager-api.onrender.com/tasks/reorder", {
+        await fetch("https://https://personal-task-manager-api-bydr.onrender.com/tasks/reorder", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ orderedTaskIds }),
